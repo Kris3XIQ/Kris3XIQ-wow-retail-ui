@@ -4,7 +4,7 @@ Addons related to layout and visuals for retail WoW.
 
 ---
 
-## 🛠️ Installation
+## 🔹 Installation
 
 1. Clone or download the AddOn folders directly into your `World of Warcraft\_retail_\Interface\AddOns\` directory.
 2. Open the in-game settings for the target AddOn. (You'll find the ingame chat-command for each addon under each addonds respective section)
@@ -12,13 +12,13 @@ Addons related to layout and visuals for retail WoW.
 
 ---
 
-## 📋 AddOn Profiles & Import Strings
+## 🔹 AddOn Profiles & Import Strings
 
 Click on any section below to expand and copy the corresponding import string or configuration details.
 
 ---
 
-### 🎨 BetterBlizz Suite
+### 🔹 BetterBlizz Suite
 
 <details>
 <summary><b>BetterBlizzFrames</b> (Click to expand import string)</summary>
@@ -40,7 +40,7 @@ Click on any section below to expand and copy the corresponding import string or
 
 ---
 
-### Ellesmere UI Complete Package
+### 🔹 Ellesmere UI Complete Package
 *Covers all Ellesmere modules (`EllesmereUI`, `ActionBars`, `CooldownManager`, `DamageMeter`, `Minimap`, `Options`, `QoL`)*
 
 <details>
@@ -54,7 +54,7 @@ Click on any section below to expand and copy the corresponding import string or
 
 ---
 
-### Frame Management
+### 🔹 Frame Management
 
 <details>
 <summary><b>FrameColor & Options</b> (Click to expand import string)</summary>
@@ -75,7 +75,7 @@ No available string - your personal preference under framesorts options on party
 
 ---
 
-### Mini Series & Resource Displays
+### 🔹 Mini Series & Resource Displays
 
 <details>
 <summary><b>MiniAuras</b> (Click to expand import string)</summary>
@@ -96,7 +96,7 @@ No available string - your personal preference under MiniResourceDisplay options
 
 ---
 
-### Arena & Utility
+### 🔹 Arena & Utility
 
 <details>
 <summary><b>sArena Reloaded</b> (Click to expand import string)</summary>

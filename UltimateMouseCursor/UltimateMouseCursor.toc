@@ -1,0 +1,9 @@
+## Interface: 120107, 120105
+## Title: Ultimate Mouse Cursor
+## Notes: An addon to add a custom reticle/marker around the mouse cursor.
+## Author: Ultimate
+## IconTexture: Interface\AddOns\UltimateMouseCursor\media\UMC_64
+## SavedVariables: UMC_Config
+UltimateMouseCursor.xml
+UltimateMouseCursor.lua
+UMC_Settings.lua

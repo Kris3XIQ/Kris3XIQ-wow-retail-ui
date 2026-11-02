@@ -1,0 +1,1002 @@
+local addonName, addon = ...
+local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+---@type MiniFramework
+local mini = addon.Framework
+
+local SWATCH_HEIGHT = 10
+local SWATCH_WIDTH = 72
+
+---@type Db
+local db
+---@class Db
+local dbDefaults = {
+	-- Where a never-moved 2.9.0 display converts to, so it does not move.
+	Point = "TOP",
+	RelativeTo = "UIParent",
+	RelativePoint = "CENTER",
+	X = 0,
+	Y = -123,
+
+	Locked = false,
+
+	Width = 150,
+	Height = 15,
+
+	Gap = 0,
+	Padding = 2,
+
+	ShowHealth = true,
+	ShowPower = true,
+	UseClassColorHealth = false,
+
+	ShowText = true,
+	Font = "Fonts\\FRIZQT__.TTF",
+	FontSize = 11,
+	FontFlags = "OUTLINE",
+	FontShadow = true,
+
+	-- A LibSharedMedia name, not a texture path: the dropdown lists names, and anything else
+	-- has no entry to match so it shows the raw value instead.
+	Texture = "Blizzard",
+	Border = true,
+
+	HealthColor = { 0, 1, 0 },
+	PowerColor = { 0.2, 0.6, 1.0 },
+	PowerUseTypeColor = true,
+
+	AlwaysShow = false,
+	OutOfCombatOpacity = 1,
+	HideTextSuffix = false,
+
+	UsePercent = false,
+
+	FadeInDuration = 1,
+	FadeOutDuration = 1,
+
+	HealthTextFormat = "%s/%s",
+	PowerTextFormat = "%s/%s",
+
+	ShowPetBar = false,
+	PetWidth = 150,
+	PetHeight = 15,
+
+	Shield = {
+		Enabled = true,
+		Color = { 1, 1, 1 },
+		Opacity = 1,
+	},
+
+	ShowIncomingHeal = true,
+	IncomingHealColor = { 0, 1, 0 },
+
+	ShowStagger = true,
+	StaggerColor = { 1, 0.98, 0.72 },
+	StaggerHeight = 10,
+
+	-- Classic-only; ignored and never shown in the options on retail, where power regen
+	-- is continuous rather than ticked.
+	Ticker = {
+		-- On by default. Harmless left true on retail, where IsSupported gates the whole
+		-- feature out before anything reads this.
+		Enabled = true,
+		Color = { 1, 1, 1 },
+		-- Fully opaque by default. Anything less blends with whatever the marker happens to be
+		-- crossing, so it looks like it changes colour partway along the bar.
+		Opacity = 1,
+		Thickness = 2,
+	},
+
+	-- Where a never-moved 2.9.0 pet bar converts to, so it does not move.
+	Pet = {
+		Point = "TOP",
+		RelativeTo = "UIParent",
+		RelativePoint = "CENTER",
+		X = 0,
+		Y = -155.5,
+		Locked = false,
+	},
+
+	ClassPower = {
+		Enabled = true,
+		Height = 10,
+		Spacing = 2,
+		Show = addon.ClassPower:DefaultShow(),
+	},
+}
+---@class Config
+local M = {}
+
+addon.Config = M
+
+local function GetTexturesList()
+	if not LSM then
+		return { "Blizzard" }
+	end
+
+	local list = LSM:List("statusbar")
+	table.sort(list)
+	return list
+end
+
+---A global statusbar override would make every row draw the same file, so this reads the
+---media table straight.
+---@param value string
+---@return string
+local function GetPreviewStatusBarTexture(value)
+	if value == "Blizzard" then
+		return addon.BlizzardStatusBarTexture
+	end
+
+	local files = LSM and LSM:HashTable("statusbar")
+	return (files and files[value]) or addon.BlizzardStatusBarTexture
+end
+
+---A menu row refuses a texture created on it, so the swatch is drawn inside the row's own
+---text instead.
+---@param value string
+---@return string
+local function TextureLabel(value)
+	local file = GetPreviewStatusBarTexture(value)
+
+	return "|T" .. file .. ":" .. SWATCH_HEIGHT .. ":" .. SWATCH_WIDTH .. "|t " .. value
+end
+
+function M:Init()
+	-- A styled button clashes with the stock Blizzard art around it in the settings screen.
+	mini:SetCustomStyling(true, { Button = false })
+
+	db = mini:GetSavedVars(dbDefaults)
+
+	-- Migrate renamed db key: Overshield -> Shield
+	if db.Overshield then
+		db.Shield = db.Overshield
+		db.Overshield = nil
+	end
+
+	-- Migrate the old texture default, which stored a path where a LibSharedMedia name belongs.
+	-- Only ever reachable as the default, since the dropdown offers names alone.
+	if db.Texture == addon.BlizzardStatusBarTexture then
+		db.Texture = "Blizzard"
+	end
+
+	local panel = CreateFrame("Frame")
+	panel.name = addonName
+
+	local category = mini:AddCategory(panel)
+
+	if not category then
+		return
+	end
+
+	-- Every panel is collected so a reset refreshes them all, not just whichever one happens
+	-- to be open; the rest would otherwise keep showing the old values until their next OnShow.
+	local panels = { panel }
+
+	local function ResetToDefaults()
+		db = mini:ResetSavedVars(dbDefaults)
+
+		for _, p in ipairs(panels) do
+			if p.MiniRefresh then
+				p:MiniRefresh()
+			end
+		end
+
+		addon:Reload()
+	end
+
+	local verticalSpacing = mini.VerticalSpacing
+	local horizontalSpacing = mini.HorizontalSpacing
+	local columns = 4
+	local columnStep = mini:ColumnWidth(columns, mini.HorizontalSpacing, 0)
+	local header = mini:PanelHeader({
+		Parent = panel,
+		Description = "Shows simple personal resource style health and power bars.",
+		Gap = 6,
+		Reset = {
+			OnAccept = ResetToDefaults,
+		},
+	})
+
+	local mainDivider = mini:Divider({
+		Parent = panel,
+		Text = "Settings",
+	})
+
+	mainDivider:SetPoint("TOP", header.Anchor, "BOTTOM", 0, -verticalSpacing)
+	mainDivider:SetPoint("LEFT", panel, "LEFT")
+	mainDivider:SetPoint("RIGHT", panel, "RIGHT", -horizontalSpacing, 0)
+
+	local locked = mini:Checkbox({
+		Parent = panel,
+		LabelText = "Locked",
+		Tooltip = "Locks the position of all bars so they can't be accidentally moved.",
+		GetValue = function()
+			return db.Locked
+		end,
+		SetValue = function(value)
+			db.Locked = value
+			db.Pet.Locked = value
+			addon:Reload()
+		end,
+	})
+
+	locked:SetPoint("TOPLEFT", mainDivider, "BOTTOMLEFT", 0, -verticalSpacing)
+
+	local alwaysShowChk = mini:Checkbox({
+		Parent = panel,
+		LabelText = "Always show",
+		Tooltip = "Whether to always show, or only show in combat.",
+		GetValue = function()
+			return db.AlwaysShow
+		end,
+		SetValue = function(value)
+			db.AlwaysShow = value
+			addon:Reload()
+		end,
+	})
+
+	alwaysShowChk:SetPoint("TOP", locked, "TOP", 0, 0)
+	alwaysShowChk:SetPoint("LEFT", panel, "LEFT", columnStep, 0)
+
+	local showText = mini:Checkbox({
+		Parent = panel,
+		LabelText = "Show text",
+		Tooltip = "Whether to show hp and power text inside the bars.",
+		GetValue = function()
+			return db.ShowText
+		end,
+		SetValue = function(value)
+			db.ShowText = value
+			addon:Reload()
+		end,
+	})
+
+	showText:SetPoint("TOP", locked, "TOP", 0, 0)
+	showText:SetPoint("LEFT", panel, "LEFT", columnStep * 2, 0)
+
+	local usePercent = mini:Checkbox({
+		Parent = panel,
+		LabelText = "Percentages",
+		Tooltip = "Show health and power as percentage when text is enabled.",
+		GetValue = function()
+			return db.UsePercent
+		end,
+		SetValue = function(value)
+			db.UsePercent = value
+			addon:Reload()
+		end,
+	})
+
+	usePercent:SetPoint("TOP", locked, "TOP", 0, 0)
+	usePercent:SetPoint("LEFT", panel, "LEFT", columnStep * 3, 0)
+
+	local showPetBar = mini:Checkbox({
+		Parent = panel,
+		LabelText = "Show pet bar",
+		Tooltip = "Show a separate health bar for your pet.",
+		GetValue = function()
+			return db.ShowPetBar
+		end,
+		SetValue = function(value)
+			db.ShowPetBar = value
+			addon:Reload()
+		end,
+	})
+
+	showPetBar:SetPoint("TOPLEFT", locked, "BOTTOMLEFT", 0, -verticalSpacing)
+
+	local showHealth = mini:Checkbox({
+		Parent = panel,
+		LabelText = "Show health bar",
+		Tooltip = "Whether to show the health bar.",
+		GetValue = function()
+			return db.ShowHealth
+		end,
+		SetValue = function(value)
+			db.ShowHealth = value
+			addon:Reload()
+		end,
+	})
+
+	showHealth:SetPoint("TOP", showPetBar, "TOP", 0, 0)
+	showHealth:SetPoint("LEFT", panel, "LEFT", columnStep, 0)
+
+	local showPower = mini:Checkbox({
+		Parent = panel,
+		LabelText = "Show power bar",
+		Tooltip = "Whether to show the power/mana bar.",
+		GetValue = function()
+			return db.ShowPower
+		end,
+		SetValue = function(value)
+			db.ShowPower = value
+			addon:Reload()
+		end,
+	})
+
+	showPower:SetPoint("TOP", showPetBar, "TOP", 0, 0)
+	showPower:SetPoint("LEFT", panel, "LEFT", columnStep * 2, 0)
+
+	local useClassColor = mini:Checkbox({
+		Parent = panel,
+		LabelText = "Class color health",
+		Tooltip = "Use your class color for the health bar.",
+		GetValue = function()
+			return db.UseClassColorHealth
+		end,
+		SetValue = function(value)
+			db.UseClassColorHealth = value
+			addon:Reload()
+		end,
+	})
+
+	useClassColor:SetPoint("TOP", showPetBar, "TOP", 0, 0)
+	useClassColor:SetPoint("LEFT", panel, "LEFT", columnStep * 3, 0)
+
+	local sizeDivider = mini:Divider({
+		Parent = panel,
+		Text = "Size",
+	})
+
+	sizeDivider:SetPoint("TOP", showPetBar, "BOTTOM", 0, -verticalSpacing)
+	sizeDivider:SetPoint("LEFT", panel, "LEFT")
+	sizeDivider:SetPoint("RIGHT", panel, "RIGHT", -horizontalSpacing, 0)
+
+	local sliderWidth = columnStep * 2 - horizontalSpacing / 2
+
+	local widthSlider = mini:Slider({
+		Parent = panel,
+		Min = 100,
+		Max = 400,
+		Step = 10,
+		Width = sliderWidth,
+		LabelText = "Width",
+		GetValue = function()
+			return db.Width
+		end,
+		SetValue = function(value)
+			db.Width = mini:ClampInt(value, 100, 400, dbDefaults.Width)
+			addon:Reload()
+		end,
+	})
+
+	widthSlider.Slider:SetPoint("TOPLEFT", sizeDivider, "BOTTOMLEFT", 0, -verticalSpacing * 3)
+
+	local heightSlider = mini:Slider({
+		Parent = panel,
+		Min = 8,
+		Max = 50,
+		Step = 1,
+		Width = sliderWidth,
+		LabelText = "Height",
+		GetValue = function()
+			return db.Height
+		end,
+		SetValue = function(value)
+			db.Height = mini:ClampInt(value, 8, 50, dbDefaults.Height)
+			addon:Reload()
+		end,
+	})
+
+	heightSlider.Slider:SetPoint("LEFT", widthSlider.Slider, "RIGHT", horizontalSpacing, 0)
+
+	local textSizeSlider = mini:Slider({
+		Parent = panel,
+		Min = 8,
+		Max = 32,
+		Step = 1,
+		Width = sliderWidth,
+		LabelText = "Text Size",
+		GetValue = function()
+			return db.FontSize
+		end,
+		SetValue = function(value)
+			db.FontSize = mini:ClampInt(value, 8, 32, dbDefaults.FontSize)
+			addon:Reload()
+		end,
+	})
+
+	textSizeSlider.Slider:SetPoint("TOPLEFT", widthSlider.Slider, "BOTTOMLEFT", 0, -verticalSpacing * 3)
+
+	local petDivider = mini:Divider({
+		Parent = panel,
+		Text = "Pet Bar",
+	})
+
+	petDivider:SetPoint("TOP", textSizeSlider.Slider, "BOTTOM", 0, -verticalSpacing)
+	petDivider:SetPoint("LEFT", panel, "LEFT")
+	petDivider:SetPoint("RIGHT", panel, "RIGHT", -horizontalSpacing, 0)
+
+	local petWidthSlider = mini:Slider({
+		Parent = panel,
+		Min = 100,
+		Max = 400,
+		Step = 10,
+		Width = sliderWidth,
+		LabelText = "Width",
+		GetValue = function()
+			return db.PetWidth
+		end,
+		SetValue = function(value)
+			db.PetWidth = mini:ClampInt(value, 100, 400, dbDefaults.PetWidth)
+			addon:Reload()
+		end,
+	})
+
+	petWidthSlider.Slider:SetPoint("TOPLEFT", petDivider, "BOTTOMLEFT", 0, -verticalSpacing * 3)
+
+	local petHeightSlider = mini:Slider({
+		Parent = panel,
+		Min = 8,
+		Max = 50,
+		Step = 1,
+		Width = sliderWidth,
+		LabelText = "Height",
+		GetValue = function()
+			return db.PetHeight
+		end,
+		SetValue = function(value)
+			db.PetHeight = mini:ClampInt(value, 8, 50, dbDefaults.PetHeight)
+			addon:Reload()
+		end,
+	})
+
+	petHeightSlider.Slider:SetPoint("LEFT", petWidthSlider.Slider, "RIGHT", horizontalSpacing, 0)
+
+	local textureDdl = mini:Dropdown({
+		Parent = panel,
+		Width = columnStep * 2,
+		LabelText = "Texture",
+		Items = GetTexturesList(),
+		GetValue = function()
+			return db.Texture
+		end,
+		SetValue = function(value)
+			db.Texture = value
+			addon:Reload()
+		end,
+		GetText = TextureLabel,
+	})
+
+	local textureDivider = mini:Divider({
+		Parent = panel,
+		Text = "Look & Feel",
+	})
+
+	textureDivider:SetPoint("TOP", petWidthSlider.Slider, "BOTTOM", 0, -verticalSpacing)
+	textureDivider:SetPoint("LEFT", panel, "LEFT")
+	textureDivider:SetPoint("RIGHT", panel, "RIGHT", -horizontalSpacing, 0)
+
+	textureDdl.Label:SetPoint("TOPLEFT", textureDivider, "BOTTOMLEFT", 0, -verticalSpacing * 2)
+
+	panel:HookScript("OnShow", function()
+		-- refresh the items
+		textureDdl:MiniRefresh()
+	end)
+
+	-- Shield subcategory
+	local overshieldPanel = CreateFrame("Frame")
+	overshieldPanel.name = "Shield"
+	mini:AddSubCategory(category, overshieldPanel)
+	panels[#panels + 1] = overshieldPanel
+
+	local osHeader = mini:PanelHeader({
+		Parent = overshieldPanel,
+		Title = "Shield",
+		Description = "Configure the colour and opacity of the shield bars.",
+		Gap = 6,
+		Divider = "Settings",
+	})
+
+	local osEnabledChk = mini:Checkbox({
+		Parent = overshieldPanel,
+		LabelText = "Show shields",
+		Tooltip = "Whether to show the absorb/shield indicator on the health bar.",
+		GetValue = function()
+			return db.Shield.Enabled
+		end,
+		SetValue = function(value)
+			db.Shield.Enabled = value
+			addon:Reload()
+		end,
+	})
+
+	osEnabledChk:SetPoint("TOPLEFT", osHeader.Anchor, "BOTTOMLEFT", 0, -verticalSpacing)
+
+	local osSwatch = mini:ColorSwatch({
+		Parent = overshieldPanel,
+		LabelText = "Colour",
+		Tooltip = "Click to change colour and opacity",
+		Size = 24,
+		GetValue = function()
+			local c = db.Shield.Color
+			return c[1] or 1, c[2] or 1, c[3] or 1, db.Shield.Opacity or 1
+		end,
+		SetValue = function(r, g, b, a)
+			db.Shield.Color[1] = r
+			db.Shield.Color[2] = g
+			db.Shield.Color[3] = b
+			db.Shield.Opacity = a
+		end,
+		OnChange = function()
+			addon:Reload()
+		end,
+	})
+
+	-- The swatch anchors its own label to its right by default; this panel wants it on
+	-- the left, so drop that point before re-anchoring - leaving it would make the
+	-- label and the swatch depend on each other.
+	osSwatch.Label:ClearAllPoints()
+	osSwatch.Label:SetPoint("TOPLEFT", osEnabledChk, "BOTTOMLEFT", 0, -verticalSpacing)
+	osSwatch:SetPoint("LEFT", osSwatch.Label, "RIGHT", 8, 0)
+
+	local osSwatchHint = overshieldPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+	osSwatchHint:SetPoint("LEFT", osSwatch, "RIGHT", 8, 0)
+	osSwatchHint:SetText("Click to change colour and opacity")
+
+	overshieldPanel:HookScript("OnShow", function()
+		osSwatch:MiniRefresh()
+	end)
+
+	-- Incoming Heals subcategory
+	local ihPanel = CreateFrame("Frame")
+	ihPanel.name = "Incoming Heals"
+	mini:AddSubCategory(category, ihPanel)
+	panels[#panels + 1] = ihPanel
+
+	local ihHeader = mini:PanelHeader({
+		Parent = ihPanel,
+		Title = "Incoming Heals",
+		Description = "Configure the incoming heal prediction bar.",
+		Gap = 6,
+		Divider = "Settings",
+	})
+
+	local ihEnabledChk = mini:Checkbox({
+		Parent = ihPanel,
+		LabelText = "Show incoming heals",
+		Tooltip = "Whether to show the incoming heal prediction on the health bar.",
+		GetValue = function()
+			return db.ShowIncomingHeal
+		end,
+		SetValue = function(value)
+			db.ShowIncomingHeal = value
+			addon:Reload()
+		end,
+	})
+
+	ihEnabledChk:SetPoint("TOPLEFT", ihHeader.Anchor, "BOTTOMLEFT", 0, -verticalSpacing)
+
+	local ihDivider = mini:Divider({
+		Parent = ihPanel,
+		Text = "Colour",
+	})
+
+	ihDivider:SetPoint("TOP", ihEnabledChk, "BOTTOM", 0, -verticalSpacing)
+	ihDivider:SetPoint("LEFT", ihPanel, "LEFT")
+	ihDivider:SetPoint("RIGHT", ihPanel, "RIGHT", -horizontalSpacing, 0)
+
+	local ihSwatch = mini:ColorSwatch({
+		Parent = ihPanel,
+		LabelText = "Colour",
+		Tooltip = "Click to change colour",
+		Size = 24,
+		HasOpacity = false,
+		GetValue = function()
+			local c = db.IncomingHealColor
+			return c[1] or 0, c[2] or 1, c[3] or 0, 1
+		end,
+		SetValue = function(r, g, b)
+			db.IncomingHealColor[1] = r
+			db.IncomingHealColor[2] = g
+			db.IncomingHealColor[3] = b
+		end,
+		OnChange = function()
+			addon:Reload()
+		end,
+	})
+
+	-- The swatch anchors its own label to its right by default; this panel wants it on
+	-- the left, so drop that point before re-anchoring - leaving it would make the
+	-- label and the swatch depend on each other.
+	ihSwatch.Label:ClearAllPoints()
+	ihSwatch.Label:SetPoint("TOPLEFT", ihDivider, "BOTTOMLEFT", 0, -verticalSpacing)
+	ihSwatch:SetPoint("LEFT", ihSwatch.Label, "RIGHT", 8, 0)
+
+	local ihSwatchHint = ihPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+	ihSwatchHint:SetPoint("LEFT", ihSwatch, "RIGHT", 8, 0)
+	ihSwatchHint:SetText("Click to change colour")
+
+	ihPanel:HookScript("OnShow", function()
+		ihSwatch:MiniRefresh()
+	end)
+
+	if addon:HasStagger() then
+		local staggerPanel = CreateFrame("Frame")
+		staggerPanel.name = "Stagger"
+		mini:AddSubCategory(category, staggerPanel)
+		panels[#panels + 1] = staggerPanel
+
+		local staggerHeader = mini:PanelHeader({
+			Parent = staggerPanel,
+			Title = "Stagger",
+			Description = "Shows a Brewmaster's staggered damage as its own bar under the power bar.",
+			Gap = 6,
+			Divider = "Settings",
+		})
+
+		local staggerEnabledChk = mini:Checkbox({
+			Parent = staggerPanel,
+			LabelText = "Show stagger",
+			Tooltip = "Whether to show a bar for the damage still to come from stagger, measured against your maximum health.",
+			GetValue = function()
+				return db.ShowStagger
+			end,
+			SetValue = function(value)
+				db.ShowStagger = value
+				addon:Reload()
+			end,
+		})
+
+		staggerEnabledChk:SetPoint("TOPLEFT", staggerHeader.Anchor, "BOTTOMLEFT", 0, -verticalSpacing)
+
+		local staggerDivider = mini:Divider({
+			Parent = staggerPanel,
+			Text = "Colour",
+		})
+
+		staggerDivider:SetPoint("TOP", staggerEnabledChk, "BOTTOM", 0, -verticalSpacing)
+		staggerDivider:SetPoint("LEFT", staggerPanel, "LEFT")
+		staggerDivider:SetPoint("RIGHT", staggerPanel, "RIGHT", -horizontalSpacing, 0)
+
+		local staggerSwatch = mini:ColorSwatch({
+			Parent = staggerPanel,
+			LabelText = "Colour",
+			Tooltip = "Click to change colour",
+			Size = 24,
+			HasOpacity = false,
+			GetValue = function()
+				local c = db.StaggerColor
+				return c[1] or 1, c[2] or 0.98, c[3] or 0.72, 1
+			end,
+			SetValue = function(r, g, b)
+				db.StaggerColor[1] = r
+				db.StaggerColor[2] = g
+				db.StaggerColor[3] = b
+			end,
+			OnChange = function()
+				addon:Reload()
+			end,
+		})
+
+		-- The swatch puts its label on its right by default, and this panel wants it on the left.
+		staggerSwatch.Label:ClearAllPoints()
+		staggerSwatch.Label:SetPoint("TOPLEFT", staggerDivider, "BOTTOMLEFT", 0, -verticalSpacing)
+		staggerSwatch:SetPoint("LEFT", staggerSwatch.Label, "RIGHT", 8, 0)
+
+		local staggerSwatchHint = staggerPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+		staggerSwatchHint:SetPoint("LEFT", staggerSwatch, "RIGHT", 8, 0)
+		staggerSwatchHint:SetText("Click to change colour")
+
+		local staggerSizeDivider = mini:Divider({
+			Parent = staggerPanel,
+			Text = "Size",
+		})
+
+		staggerSizeDivider:SetPoint("TOP", staggerSwatch, "BOTTOM", 0, -verticalSpacing)
+		staggerSizeDivider:SetPoint("LEFT", staggerPanel, "LEFT")
+		staggerSizeDivider:SetPoint("RIGHT", staggerPanel, "RIGHT", -horizontalSpacing, 0)
+
+		local staggerHeightSlider = mini:Slider({
+			Parent = staggerPanel,
+			Min = 8,
+			Max = 50,
+			Step = 1,
+			Width = sliderWidth,
+			LabelText = "Height",
+			GetValue = function()
+				return db.StaggerHeight
+			end,
+			SetValue = function(value)
+				db.StaggerHeight = mini:ClampInt(value, 8, 50, dbDefaults.StaggerHeight)
+				addon:Reload()
+			end,
+		})
+
+		staggerHeightSlider.Slider:SetPoint("TOPLEFT", staggerSizeDivider, "BOTTOMLEFT", 0, -verticalSpacing * 3)
+
+		staggerPanel:HookScript("OnShow", function()
+			staggerSwatch:MiniRefresh()
+		end)
+	end
+
+	local classPowerPanel = CreateFrame("Frame")
+	classPowerPanel.name = "Class Power"
+	mini:AddSubCategory(category, classPowerPanel)
+	panels[#panels + 1] = classPowerPanel
+
+	local cpHeader = mini:PanelHeader({
+		Parent = classPowerPanel,
+		Title = "Class Power",
+		Description = "Shows combo points, holy power, runes and other class resources under the power bar.",
+		Gap = 6,
+		Divider = "Settings",
+	})
+
+	local cpEnabledChk = mini:Checkbox({
+		Parent = classPowerPanel,
+		LabelText = "Show class power",
+		Tooltip = "Shows combo points, holy power, runes and other class resources under the power bar.",
+		GetValue = function()
+			return db.ClassPower.Enabled
+		end,
+		SetValue = function(value)
+			db.ClassPower.Enabled = value
+			addon:Reload()
+		end,
+	})
+
+	cpEnabledChk:SetPoint("TOPLEFT", cpHeader.Anchor, "BOTTOMLEFT", 0, -verticalSpacing)
+
+	local cpShowDivider = mini:Divider({
+		Parent = classPowerPanel,
+		Text = "Show on",
+	})
+
+	cpShowDivider:SetPoint("TOP", cpEnabledChk, "BOTTOM", 0, -verticalSpacing)
+	cpShowDivider:SetPoint("LEFT", classPowerPanel, "LEFT")
+	cpShowDivider:SetPoint("RIGHT", classPowerPanel, "RIGHT", -horizontalSpacing, 0)
+
+	local cpEntries = addon.ClassPower:VisibilityEntries()
+	local cpSizeAnchor = cpShowDivider
+
+	if #cpEntries == 0 then
+		local cpNoneText = classPowerPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+		cpNoneText:SetPoint("TOPLEFT", cpShowDivider, "BOTTOMLEFT", 0, -verticalSpacing)
+		cpNoneText:SetText("Your class has no class power on this client.")
+		cpSizeAnchor = cpNoneText
+	else
+		for i, entry in ipairs(cpEntries) do
+			local chk = mini:Checkbox({
+				Parent = classPowerPanel,
+				LabelText = entry.Label,
+				GetValue = function()
+					return db.ClassPower.Show[entry.Key] ~= false
+				end,
+				SetValue = function(value)
+					db.ClassPower.Show[entry.Key] = value
+					addon:Reload()
+				end,
+			})
+
+			chk:SetPoint("TOPLEFT", cpShowDivider, "BOTTOMLEFT", (i - 1) * columnStep, -verticalSpacing)
+
+			if i == 1 then
+				cpSizeAnchor = chk
+			end
+		end
+	end
+
+	local cpSizeDivider = mini:Divider({
+		Parent = classPowerPanel,
+		Text = "Size",
+	})
+
+	cpSizeDivider:SetPoint("TOP", cpSizeAnchor, "BOTTOM", 0, -verticalSpacing)
+	cpSizeDivider:SetPoint("LEFT", classPowerPanel, "LEFT")
+	cpSizeDivider:SetPoint("RIGHT", classPowerPanel, "RIGHT", -horizontalSpacing, 0)
+
+	local cpHeightSlider = mini:Slider({
+		Parent = classPowerPanel,
+		Min = 4,
+		Max = 30,
+		Step = 1,
+		Width = sliderWidth,
+		LabelText = "Height",
+		GetValue = function()
+			return db.ClassPower.Height
+		end,
+		SetValue = function(value)
+			db.ClassPower.Height = mini:ClampInt(value, 4, 30, dbDefaults.ClassPower.Height)
+			addon:Reload()
+		end,
+	})
+
+	cpHeightSlider.Slider:SetPoint("TOPLEFT", cpSizeDivider, "BOTTOMLEFT", 0, -verticalSpacing * 3)
+
+	local cpSpacingSlider = mini:Slider({
+		Parent = classPowerPanel,
+		Min = 0,
+		Max = 10,
+		Step = 1,
+		Width = sliderWidth,
+		LabelText = "Spacing",
+		GetValue = function()
+			return db.ClassPower.Spacing
+		end,
+		SetValue = function(value)
+			db.ClassPower.Spacing = mini:ClampInt(value, 0, 10, dbDefaults.ClassPower.Spacing)
+			addon:Reload()
+		end,
+	})
+
+	cpSpacingSlider.Slider:SetPoint("LEFT", cpHeightSlider.Slider, "RIGHT", horizontalSpacing, 0)
+
+	-- Power Tick subcategory. Classic only - retail regen is continuous rather than ticked,
+	-- so there is nothing to point at and the panel isn't created there at all.
+	if addon.PowerTick:IsSupported() then
+		local tickerPanel = CreateFrame("Frame")
+		tickerPanel.name = "Power Tick"
+		mini:AddSubCategory(category, tickerPanel)
+		panels[#panels + 1] = tickerPanel
+
+		local tickerHeader = mini:PanelHeader({
+			Parent = tickerPanel,
+			Title = "Power Tick",
+			Description = "Shows when your next energy or mana regen tick will land.",
+			Gap = 6,
+		})
+
+		local tickerEnabledChk = mini:Checkbox({
+			Parent = tickerPanel,
+			LabelText = "Show power tick",
+			Tooltip = "Shows a marker sweeping across the power bar that restarts on every regen tick.",
+			GetValue = function()
+				return db.Ticker.Enabled
+			end,
+			SetValue = function(value)
+				db.Ticker.Enabled = value
+				addon:Reload()
+			end,
+		})
+
+		tickerEnabledChk:SetPoint("TOPLEFT", tickerHeader.Anchor, "BOTTOMLEFT", 0, -verticalSpacing)
+
+		local tickerDivider = mini:Divider({
+			Parent = tickerPanel,
+			Text = "Appearance",
+		})
+
+		tickerDivider:SetPoint("TOP", tickerEnabledChk, "BOTTOM", 0, -verticalSpacing)
+		tickerDivider:SetPoint("LEFT", tickerPanel, "LEFT")
+		tickerDivider:SetPoint("RIGHT", tickerPanel, "RIGHT", -horizontalSpacing, 0)
+
+		local tickerThicknessSlider = mini:Slider({
+			Parent = tickerPanel,
+			Min = 1,
+			Max = 10,
+			Step = 1,
+			Width = sliderWidth,
+			LabelText = "Thickness",
+			GetValue = function()
+				return db.Ticker.Thickness
+			end,
+			SetValue = function(value)
+				db.Ticker.Thickness = mini:ClampInt(value, 1, 10, dbDefaults.Ticker.Thickness)
+				addon:Reload()
+			end,
+		})
+
+		tickerThicknessSlider.Slider:SetPoint("TOPLEFT", tickerDivider, "BOTTOMLEFT", 0, -verticalSpacing * 3)
+
+		-- Same as the shield panel: the swatch anchors its own label to its right by default,
+		-- so drop that point before re-anchoring the label to the left.
+		local tickerSwatch = mini:ColorSwatch({
+			Parent = tickerPanel,
+			LabelText = "Colour",
+			Tooltip = "Click to change colour and opacity",
+			Size = 24,
+			GetValue = function()
+				local c = db.Ticker.Color
+				return c[1] or 1, c[2] or 1, c[3] or 1, db.Ticker.Opacity or 1
+			end,
+			SetValue = function(r, g, b, a)
+				db.Ticker.Color[1] = r
+				db.Ticker.Color[2] = g
+				db.Ticker.Color[3] = b
+				db.Ticker.Opacity = a
+			end,
+			OnChange = function()
+				addon:Reload()
+			end,
+		})
+
+		tickerSwatch.Label:ClearAllPoints()
+		tickerSwatch.Label:SetPoint("TOPLEFT", tickerThicknessSlider.Slider, "BOTTOMLEFT", 0, -verticalSpacing * 2)
+		tickerSwatch:SetPoint("LEFT", tickerSwatch.Label, "RIGHT", 8, 0)
+
+		local tickerSwatchHint = tickerPanel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+		tickerSwatchHint:SetPoint("LEFT", tickerSwatch, "RIGHT", 8, 0)
+		tickerSwatchHint:SetText("Click to change colour and opacity")
+
+		tickerPanel:HookScript("OnShow", function()
+			tickerSwatch:MiniRefresh()
+		end)
+	end
+
+	-- Misc subcategory
+	local miscPanel = CreateFrame("Frame")
+	miscPanel.name = "Misc"
+	mini:AddSubCategory(category, miscPanel)
+	panels[#panels + 1] = miscPanel
+
+	local miscHeader = mini:PanelHeader({
+		Parent = miscPanel,
+		Title = "Misc",
+		Description = "Miscellaneous settings.",
+		Gap = 6,
+	})
+
+	local miscDivider = mini:Divider({
+		Parent = miscPanel,
+		Text = "Visibility",
+	})
+
+	miscDivider:SetPoint("TOP", miscHeader.Anchor, "BOTTOM", 0, -verticalSpacing)
+	miscDivider:SetPoint("LEFT", miscPanel, "LEFT")
+	miscDivider:SetPoint("RIGHT", miscPanel, "RIGHT", -horizontalSpacing, 0)
+
+	local hideTextSuffixChk = mini:Checkbox({
+		Parent = miscPanel,
+		LabelText = "Hide text suffix",
+		Tooltip = "Hides suffixes on bar text, such as '%' for percentages and 'K' for large numbers.",
+		GetValue = function()
+			return db.HideTextSuffix
+		end,
+		SetValue = function(value)
+			db.HideTextSuffix = value
+			addon:Reload()
+		end,
+	})
+
+	hideTextSuffixChk:SetPoint("TOPLEFT", miscDivider, "BOTTOMLEFT", 0, -verticalSpacing)
+
+	local outOfCombatOpacityLabel = miscPanel:CreateFontString(nil, "ARTWORK", "GameFontWhite")
+	outOfCombatOpacityLabel:SetPoint("TOPLEFT", hideTextSuffixChk, "BOTTOMLEFT", 0, -verticalSpacing)
+	outOfCombatOpacityLabel:SetText("Out of combat opacity")
+
+	local outOfCombatOpacitySlider = mini:Slider({
+		Parent = miscPanel,
+		Min = 0,
+		Max = 1,
+		Step = 0.05,
+		Width = sliderWidth,
+		GetValue = function()
+			return db.OutOfCombatOpacity or 1
+		end,
+		SetValue = function(value)
+			db.OutOfCombatOpacity = math.max(0, math.min(1, value))
+			addon:Reload()
+		end,
+	})
+
+	outOfCombatOpacitySlider.Slider:SetPoint("TOPLEFT", outOfCombatOpacityLabel, "BOTTOMLEFT", 0, -verticalSpacing * 3)
+
+	SLASH_MINIRESOURCEDISPLAY1 = "/mrd"
+	SLASH_MINIRESOURCEDISPLAY2 = "/minird"
+	SLASH_MINIRESOURCEDISPLAY3 = "/miniresourcedisplay"
+	SlashCmdList.MINIRESOURCEDISPLAY = function(msg)
+		msg = (msg or ""):lower():match("^%s*(.-)%s*$")
+
+		if msg == "reset" then
+			ResetToDefaults()
+			return
+		elseif msg == "tick" and addon.PowerTick:IsSupported() then
+			for _, line in ipairs(addon.PowerTick:Describe()) do
+				mini:NotifyWithPrefix(line)
+			end
+			return
+		elseif msg and msg ~= "" then
+			mini:NotifyWithPrefix("Commands:")
+			mini:NotifyWithPrefix("/mrd reset")
+
+			if addon.PowerTick:IsSupported() then
+				mini:NotifyWithPrefix("/mrd tick")
+			end
+
+			return
+		end
+
+		mini:OpenSettings(category, panel)
+	end
+end

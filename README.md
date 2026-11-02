@@ -7,8 +7,8 @@ Addons related to layout and visuals for retail WoW.
 ## 🔹 Installation
 
 1. Clone or download the AddOn folders directly into your `World of Warcraft\_retail_\Interface\AddOns\` directory.
-2. Open the in-game settings for the target AddOn. (You'll find the ingame chat-command for each addon under each addonds respective section)
-3. Open the **Profiles** tab, click **Import**, and paste the relevant string from above.
+2. Open the in-game settings for the target AddOn.
+3. Open the **Profiles** tab, click **Import**, and paste the relevant string from above (You'll find the ingame chat-command for each addon under each addons respective section).
 
 ---
 

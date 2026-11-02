@@ -44,7 +44,7 @@ function BBP.PetIndicator(frame)
         hooksecurefunc(frame, "SetAlpha", function(self)
             if not self.bbpHiddenNPC or self.changingAlpha or self:IsForbidden() then return end
             self.changingAlpha = true
-            if self.unit and not UnitIsUnit(self.unit, "target") then
+            if self.unit and not BBP.TargetShowsHidden(self.unit) then
                 self:SetAlpha(0)
             end
             self.changingAlpha = nil
@@ -98,7 +98,7 @@ function BBP.PetIndicator(frame)
             if isRealPet then
                 frame.petIndicator:Show()
             elseif config.petIndicatorHideSecondaryPets then
-                if not UnitIsUnit(frame.unit, "target") then
+                if not BBP.TargetShowsHidden(frame.unit) then
                     if config.petIndicatorShowMurloc then
                         BBP.InitMurlocMode(frame, config, db)
                         ShowMurloc(frame)
@@ -138,7 +138,7 @@ function BBP.PetIndicator(frame)
                 frame.petIndicator:Hide()
             end
             if config.petIndicatorHideSecondaryPets and not isRealPet then
-                if not UnitIsUnit(frame.unit, "target") then
+                if not BBP.TargetShowsHidden(frame.unit) then
                     if config.petIndicatorShowMurloc then
                         BBP.InitMurlocMode(frame, config, db)
                         ShowMurloc(frame)
@@ -167,7 +167,7 @@ function BBP.PetIndicator(frame)
                 frame.petIndicator:Show()
                 return
             elseif config.petIndicatorHideSecondaryPets and info.isEnemy then
-                if not UnitIsUnit(frame.unit, "target") then
+                if not BBP.TargetShowsHidden(frame.unit) then
                     if config.petIndicatorShowMurloc then
                         BBP.InitMurlocMode(frame, config, db)
                         ShowMurloc(frame)
@@ -181,7 +181,7 @@ function BBP.PetIndicator(frame)
     end
 
     if config.petIndicatorHideSecondaryPets and BBP.secondaryPets[npcID] and info.isEnemy then
-        if not UnitIsUnit(frame.unit, "target") then
+        if not BBP.TargetShowsHidden(frame.unit) then
             if config.petIndicatorShowMurloc then
                 BBP.InitMurlocMode(frame, config, db)
                 ShowMurloc(frame)
@@ -200,10 +200,14 @@ end
 
 function BBP.HideOtherPet(frame)
     if not frame.bbpOtherPetAlphaHook then
-        hooksecurefunc(frame, "SetAlpha", function(self)
+        hooksecurefunc(frame, "SetAlpha", function(self, alpha)
             if not self.bbpHiddenOtherPet or self.changingAlpha or self:IsForbidden() then return end
             self.changingAlpha = true
-            self:SetAlpha(0)
+            if self.bbpOtherPetSecret then
+                self:SetAlphaFromBoolean(self.bbpOtherPetOwned, 0, alpha)
+            else
+                self:SetAlpha(0)
+            end
             self.changingAlpha = nil
         end)
         frame.bbpOtherPetAlphaHook = true
@@ -213,16 +217,35 @@ function BBP.HideOtherPet(frame)
     local info = frame.BetterBlizzPlates and frame.BetterBlizzPlates.unitInfo
     local hide = BetterBlizzPlatesDB.friendlyHideOtherPets and unit and info
         and (info.isFriend or info.isFriendlyNpc)
-        and UnitIsOtherPlayersPet(unit)
-        and not UnitIsUnit(unit, "target")
-
+        and not BBP.TargetShowsHidden(unit)
+    local owned, ownedSecret
     if hide then
+        local othersPet = UnitIsOtherPlayersPet(unit)
+        if not othersPet and BetterBlizzPlatesDB.friendlyHideOwnSecondaryPets and not UnitIsUnit(unit, "pet") then
+            owned = UnitIsOwnerOrControllerOfUnit("player", unit)
+            ownedSecret = issecretvalue(owned)
+            othersPet = not ownedSecret and owned
+        end
+        hide = othersPet
+    end
+
+    if ownedSecret then
         frame.bbpHiddenOtherPet = true
+        frame.bbpOtherPetSecret = true
+        frame.bbpOtherPetOwned = owned
+        frame.hideCastbarOverride = false
+        frame:SetAlphaFromBoolean(owned, 0, 1)
+    elseif hide then
+        frame.bbpHiddenOtherPet = true
+        frame.bbpOtherPetSecret = nil
+        frame.bbpOtherPetOwned = nil
         frame.hideCastbarOverride = true
         frame.castBar:Hide()
         frame:SetAlpha(0)
     elseif frame.bbpHiddenOtherPet then
         frame.bbpHiddenOtherPet = nil
+        frame.bbpOtherPetSecret = nil
+        frame.bbpOtherPetOwned = nil
         frame.hideCastbarOverride = false
         frame:SetAlpha(1)
     end

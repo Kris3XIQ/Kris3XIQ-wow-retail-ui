@@ -432,6 +432,10 @@ end
 
 function sArenaFrameMixin:UpdateHealerStatus()
     local db = self.parent and self.parent.db
+    local rc = db and db.profile.rangeCheck
+    if rc and rc.enabled and rc.healerOnly then
+        self.parent:ApplyRangeCheckTextures()
+    end
     local widgetSettings = db and db.profile.layoutSettings[db.profile.currentLayout].widgets
     if not widgetSettings or not widgetSettings.healerIndicator or not widgetSettings.healerIndicator.enabled then
         self.WidgetOverlay.healerIndicator:Hide()
@@ -759,7 +763,7 @@ function sArenaFrameMixin:CreateArenaTargetText()
     textFrame:EnableMouse(true)
     local fs = overlay:CreateFontString(nil, "OVERLAY")
     local nf, _, nflag = self.Name:GetFont()
-    fs:SetFont(nf or self.parent.pFont, 10, nflag or "OUTLINE")
+    self.parent:SetNameFont(fs, nf or self.parent.pFont, 10, nflag or "OUTLINE")
     fs:SetShadowColor(0, 0, 0, 1)
     fs:SetShadowOffset(1, -1)
     fs:SetIgnoreParentAlpha(true)
@@ -784,7 +788,7 @@ function sArenaFrameMixin:PositionArenaTargetText()
     local anchorMap = { LEFT = "TOPLEFT", CENTER = "TOP", RIGHT = "TOPRIGHT" }
     local anchor = anchorMap[poa.anchor] or "TOPRIGHT"
     local nf, _, nflag = self.Name:GetFont()
-    fs:SetFont(nf or self.parent.pFont, fontSize, nflag or "OUTLINE")
+    self.parent:SetNameFont(fs, nf or self.parent.pFont, fontSize, nflag or "OUTLINE")
     fs:ClearAllPoints()
     fs:SetPoint(anchor, self.HealthBar, anchor, poa.posX or 0, poa.posY or 0)
     textFrame:SetSize(80, fontSize + 4)
@@ -852,7 +856,7 @@ function sArenaMixin:CreatePartyFrameTargetText(partyFrame)
     local fs = overlay:CreateFontString(nil, "OVERLAY")
     local refName = self["arena1"] and self["arena1"].Name
     local nf, _, nflag = refName and refName:GetFont()
-    fs:SetFont(nf or self.pFont, 10, nflag or "OUTLINE")
+    self:SetNameFont(fs, nf or self.pFont, 10, nflag or "OUTLINE")
     fs:SetShadowColor(0, 0, 0, 1)
     fs:SetShadowOffset(1, -1)
     fs:SetIgnoreParentAlpha(true)
@@ -890,7 +894,7 @@ function sArenaMixin:PositionArenaTargetTextOnPartyFrames()
             local fs = overlay.partyTargetText
             local refName = self["arena1"] and self["arena1"].Name
             local nf, _, nflag = refName and refName:GetFont()
-            fs:SetFont(nf or self.pFont, fontSize, nflag or "OUTLINE")
+            self:SetNameFont(fs, nf or self.pFont, fontSize, nflag or "OUTLINE")
             fs:ClearAllPoints()
             fs:SetPoint(anchor, overlay, anchor, posX, posY)
             textFrame:SetSize(80, fontSize + 4)

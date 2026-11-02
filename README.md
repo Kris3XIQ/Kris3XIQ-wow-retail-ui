@@ -114,7 +114,8 @@ No available string - your personal preference under MiniResourceDisplay options
 No available string - your personal preference under UltimateMouseCursor options on sizing and coloring.
 ```
 </details>
+
 ---
 
-## Disclaimer
+#### Disclaimer
 The rights, trademarks, and intellectual property for each individual AddOn and user interface element belong entirely to their respective original creators and authors. I do not claim ownership of any underlying code, textures, or frameworks. This repository merely shares my personal profile configurations, layout exports, and option setups used to visually organize these pre-existing AddOns.

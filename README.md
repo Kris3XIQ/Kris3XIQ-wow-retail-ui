@@ -40,7 +40,7 @@ Click on any section below to expand and copy the corresponding import string or
 
 ---
 
-### 👑 Ellesmere UI Complete Package
+### Ellesmere UI Complete Package
 *Covers all Ellesmere modules (`EllesmereUI`, `ActionBars`, `CooldownManager`, `DamageMeter`, `Minimap`, `Options`, `QoL`)*
 
 <details>
@@ -54,7 +54,7 @@ Click on any section below to expand and copy the corresponding import string or
 
 ---
 
-### 🖼️ Frame Management
+### Frame Management
 
 <details>
 <summary><b>FrameColor & Options</b> (Click to expand import string)</summary>
@@ -75,7 +75,7 @@ No available string - your personal preference under framesorts options on party
 
 ---
 
-### ⚡ Mini Series & Resource Displays
+### Mini Series & Resource Displays
 
 <details>
 <summary><b>MiniAuras</b> (Click to expand import string)</summary>
@@ -96,7 +96,7 @@ No available string - your personal preference under MiniResourceDisplay options
 
 ---
 
-### ⚔️ Arena & Utility
+### Arena & Utility
 
 <details>
 <summary><b>sArena Reloaded</b> (Click to expand import string)</summary>
@@ -114,5 +114,7 @@ No available string - your personal preference under MiniResourceDisplay options
 No available string - your personal preference under UltimateMouseCursor options on sizing and coloring.
 ```
 </details>
+---
 
+## Disclaimer
 The rights, trademarks, and intellectual property for each individual AddOn and user interface element belong entirely to their respective original creators and authors. I do not claim ownership of any underlying code, textures, or frameworks. This repository merely shares my personal profile configurations, layout exports, and option setups used to visually organize these pre-existing AddOns.
